@@ -251,3 +251,50 @@ def build_qa_orchestrator() -> Agent:
         ),
         llm=llm, verbose=True, allow_delegation=True
     )
+
+
+# ── Run function ──────────────────────────────────────────────────────────────
+
+def run_qa_orchestrator(brief: str, context: dict) -> str:
+    """
+    Instantiate the QA Team Orchestrator, run it against the brief, return output.
+
+    Called by flows/qa_intake_flow.py via:
+        run_qa_orchestrator = _import_orchestrator()
+        result = run_qa_orchestrator(brief=brief_text, context=project_context)
+    """
+    from crewai import Crew, Task
+
+    agent = build_qa_orchestrator()
+    context_block = (
+        context.get("raw", "")
+        or (json.dumps(context, indent=2) if context else "No context provided.")
+    )
+
+    task = Task(
+        description=(
+            f"Project brief:\n{brief}\n\n"
+            f"Project context:\n{context_block}\n\n"
+            "Coordinate portfolio-wide quality assurance for this project. "
+            "Assign the appropriate specialist agents (functional, performance, "
+            "security, accessibility, data quality, content compliance). "
+            "Every output must open with a QA VERDICT block: "
+            "PASS / CONDITIONAL / FAIL / CRITICAL, blocking issue count, "
+            "non-blocking issue count, and SIGN-OFF STATUS. "
+            "Every issue must have an ID, severity, category, description, "
+            "expected vs actual, remediation, and blocking flag. "
+            "FAIL and CRITICAL verdicts trigger immediate human escalation. "
+            "Nothing ships without QA sign-off. "
+            "End with CROSS-TEAM FLAGS and OPEN QUESTIONS."
+        ),
+        expected_output=(
+            "Complete QA report with VERDICT block, full issue list with IDs, "
+            "severity, and remediation steps. Sign-off decision clearly stated. "
+            "No placeholders. Ends with CROSS-TEAM FLAGS and OPEN QUESTIONS."
+        ),
+        agent=agent,
+    )
+
+    crew = Crew(agents=[agent], tasks=[task], verbose=True)
+    result = crew.kickoff()
+    return str(result)
